@@ -20,11 +20,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Installation Python en cache layer
-COPY requirements.txt ./requirements.txt
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Code applicatif — on conserve la hiérarchie `backend/`
-COPY backend/ ./backend/
+COPY . .
 
 # Données initiales (CSV opérateur/marchand). Le volume défini dans
 # docker-compose.yml prendra le dessus au runtime.
