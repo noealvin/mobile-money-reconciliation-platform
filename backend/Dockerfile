@@ -34,7 +34,7 @@ COPY data/ ./data/
 RUN mkdir -p /app/logs
 
 # Entrypoint : attend la DB, crée l'admin, démarre uvicorn
-COPY backend/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY  entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 8000
