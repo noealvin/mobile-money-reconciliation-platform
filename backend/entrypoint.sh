@@ -21,7 +21,7 @@ for i in $(seq 1 30); do
 done
 
 echo "👤 Ensuring admin user exists..."
-python -m backend.create_admin || echo "⚠️  create_admin a échoué (peut-être déjà créé) — on continue."
+python -m create_admin || echo "⚠️  create_admin a échoué (peut-être déjà créé) — on continue."
 
 echo "🚀 Starting FastAPI on 0.0.0.0:8000"
-exec uvicorn backend.main:app --host 0.0.0.0 --port 8000
+exec uvicorn main:app --host 0.0.0.0 --port 8000
