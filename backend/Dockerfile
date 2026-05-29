@@ -28,7 +28,7 @@ COPY backend/ ./backend/
 
 # Données initiales (CSV opérateur/marchand). Le volume défini dans
 # docker-compose.yml prendra le dessus au runtime.
-COPY data/ ./data/
+#COPY data/ ./data/
 
 # Dossier logs (volume monté ensuite)
 RUN mkdir -p /app/logs
