@@ -1,0 +1,24 @@
+## Folders
+**/__pycache__
+**/*.pyc
+**/node_modules
+**/dist
+**/.vite
+**/venv
+**/.venv
+
+## Editor
+.vscode
+.idea
+.DS_Store
+
+## Logs persistés (montés via volume)
+logs/*.log
+
+## Archives parasites
+*.rar
+*.zip
+
+## Git
+.git
+.gitignore

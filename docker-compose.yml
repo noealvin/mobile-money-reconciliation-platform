@@ -1,0 +1,80 @@
+services:
+
+  # =========================
+  # PostgreSQL
+  # =========================
+  db:
+    image: postgres:15
+    container_name: mmrecon_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mmrecon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mmrecon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mmrecon_net
+
+  # =========================
+  # FastAPI Backend
+  # NB: build context = racine du projet pour que les imports
+  #     `from backend.X import Y` continuent de fonctionner.
+  # =========================
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mmrecon_backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/mmrecon
+      SIM_INTERVAL: "3"
+      DB_HOST: db
+      DB_PORT: "5432"
+    ports:
+      - "8000:8000"
+    volumes:
+      # Données CSV utilisées par le moteur de réconciliation.
+      # Persistées sur l'hôte = utiles pour rejouer / inspecter.
+      - ./data:/app/data
+      # Logs transactions (générés par le simulateur)
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - mmrecon_net
+
+  # =========================
+  # React + Nginx
+  # Sert le bundle sur :5173 et reverse-proxy /api -> backend:8000
+  # =========================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: mmrecon_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - mmrecon_net
+
+
+volumes:
+  postgres_data:
+
+
+networks:
+  mmrecon_net:
+    driver: bridge
