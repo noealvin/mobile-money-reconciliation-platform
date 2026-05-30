@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String
-from backend.database import Base
+from database import Base
 #creation de la table user pour creer les utilisateur admin de l appli
 
 class User(Base):
