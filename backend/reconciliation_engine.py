@@ -1,13 +1,20 @@
 import pandas as pd
+from pathlib import Path
 
 
 def run_reconciliation():
 
     # =========================
-    # LECTURE DES CSV
+    # LECTURE DES CSV (FIX PATH POUR PROD RENDER)
     # =========================
-    operator_df = pd.read_csv("data/operator.csv")
-    merchant_df = pd.read_csv("data/merchant.csv")
+    BASE_DIR = Path(__file__).resolve().parent
+    DATA_DIR = BASE_DIR / "data"
+
+    operator_path = DATA_DIR / "operator.csv"
+    merchant_path = DATA_DIR / "merchant.csv"
+
+    operator_df = pd.read_csv(operator_path)
+    merchant_df = pd.read_csv(merchant_path)
 
     # =========================
     # NORMALISATION TYPES
@@ -69,7 +76,7 @@ def run_reconciliation():
         # =========================
         # 3. AMOUNT MISMATCH
         # =========================
-        elif abs(operator_amount - merchant_amount) > 0.01:
+        elif operator_amount is not None and merchant_amount is not None and abs(operator_amount - merchant_amount) > 0.01:
             anomalies.append({
                 "reference": reference,
                 "issue": "AMOUNT_MISMATCH",
@@ -92,15 +99,13 @@ def run_reconciliation():
                 "date": tx_date
             })
 
-        # 🔧 Bloc "AMOUNT_MISMATCH" dupliqué + mal indenté supprimé ici
-        #    (il était inaccessible car le 1er bloc plus haut traite déjà ce cas)
-
-
     # =========================
     # EXPORT CSV REPORT
     # =========================
+    output_path = DATA_DIR / "reconciliation_report.csv"
+
     pd.DataFrame(anomalies).to_csv(
-        "data/reconciliation_report.csv",
+        output_path,
         index=False
     )
 
