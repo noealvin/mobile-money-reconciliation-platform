@@ -123,3 +123,6 @@ def run_reconciliation():
         "summary": summary,
         "anomalies": anomalies
     }
+
+    print(len(operator_df), len(merchant_df))
+    print(merged_df.head())
