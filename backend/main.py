@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import uuid
+from generator import generate_datasets
 
 # ✅ Imports corrigés : tous préfixés par ``
 #    (l'ancien `from schemas import ...` plantait dans Docker)
@@ -23,6 +24,7 @@ from simulator import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
+
 
 
 app = FastAPI(title="MM-Recon API")
@@ -221,6 +223,7 @@ def simulator_status():
 def reconciliation_run():
     db = SessionLocal()
     try:
+        generate_datasets(db) 
         result = run_reconciliation()
 
         # ✅ save_reconciliation_result retourne maintenant

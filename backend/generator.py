@@ -1,63 +1,86 @@
 import random
 import pandas as pd
+from pathlib import Path
+
 from database import SessionLocal
 from models_pytantic import Transaction
 
-db = SessionLocal()
+# ✅ On écrit dans le MÊME dossier que celui lu par reconciliation_engine.py
+#    (BASE_DIR/data), pour que ça marche en local ET sur Render, quel que
+#    soit le répertoire de travail.
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
 
-# =========================
-# RECUPERATION DES DONNEES DB
-# =========================
-transactions = db.query(Transaction).all()
+COLUMNS = ["reference", "amount", "status", "created_at"]
 
-operator_data = []
-merchant_data = []
 
-for transaction in transactions:
+def generate_datasets(db=None):
+    """
+    Construit operator.csv et merchant.csv À PARTIR des transactions en base.
 
-    # =========================
-    # DONNEES OPERATEUR
-    # =========================
-    operator_record = {
-        "reference": transaction.reference,
-        "amount": transaction.amount,
-        "status": transaction.status,
-        "created_at": transaction.created_at  # 👈 toujours présent
-    }
+      - operator = reflet fidèle de la base
+      - merchant = copie dans laquelle on injecte des écarts (anomalies)
 
-    operator_data.append(operator_record)
+    Les anomalies sont DÉTERMINISTES par référence : une même transaction
+    produit toujours le même type d'écart d'un run à l'autre. Cela évite que
+    les anomalies « sautent » à chaque réconciliation et garde la résolution
+    cohérente.
 
-    # =========================
-    # COPIE POUR MERCHANT
-    # =========================
-    merchant_record = operator_record.copy()
+    Retourne un petit récap {"operator": n, "merchant": m}.
+    """
+    own_session = db is None
+    if own_session:
+        db = SessionLocal()
 
-    # =========================
-    # SIMULATION DES ANOMALIES
-    # =========================
-    anomaly_type = random.choice(["none", "amount", "missing", "status"])
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    # anomalie montant
-    if anomaly_type == "amount":
-        merchant_record["amount"] += random.randint(100, 500)
+        transactions = db.query(Transaction).all()
 
-    # anomalie statut
-    elif anomaly_type == "status":
-        merchant_record["status"] = "failed"
+        operator_data = []
+        merchant_data = []
 
-    # anomalie transaction manquante côté merchant
-    elif anomaly_type == "missing":
-        continue
+        for t in transactions:
+            operator_record = {
+                "reference": t.reference,
+                "amount": t.amount,
+                "status": t.status,
+                "created_at": t.created_at,
+            }
+            operator_data.append(operator_record)
 
-    merchant_data.append(merchant_record)
+            # Tirage déterministe basé sur la référence (stable dans le temps).
+            # "none" est doublé pour que la majorité des transactions soient saines.
+            rng = random.Random(str(t.reference))
+            anomaly_type = rng.choice(["none", "none", "amount", "missing", "status"])
 
-# =========================
-# EXPORT CSV
-# =========================
-operator_df = pd.DataFrame(operator_data)
-merchant_df = pd.DataFrame(merchant_data)
+            merchant_record = operator_record.copy()
 
-operator_df.to_csv("data/operator.csv", index=False)
-merchant_df.to_csv("data/merchant.csv", index=False)
+            if anomaly_type == "amount":
+                merchant_record["amount"] = (t.amount or 0) + rng.randint(100, 500)
+            elif anomaly_type == "status":
+                merchant_record["status"] = "failed"
+            elif anomaly_type == "missing":
+                # absent côté marchand → on ne l'ajoute pas
+                continue
 
-print("Datasets generated successfully")
+            merchant_data.append(merchant_record)
+
+        # columns=COLUMNS garantit un en-tête correct même si la base est vide
+        pd.DataFrame(operator_data, columns=COLUMNS).to_csv(
+            DATA_DIR / "operator.csv", index=False
+        )
+        pd.DataFrame(merchant_data, columns=COLUMNS).to_csv(
+            DATA_DIR / "merchant.csv", index=False
+        )
+
+        return {"operator": len(operator_data), "merchant": len(merchant_data)}
+
+    finally:
+        if own_session:
+            db.close()
+
+
+# Permet aussi de lancer manuellement :  python -m generator
+if __name__ == "__main__":
+    print(generate_datasets())
