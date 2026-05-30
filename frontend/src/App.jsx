@@ -31,9 +31,16 @@ const STATUS_CONFIG = {
   reversed: { label: "Annulées",   color: "#94a3b8", bg: "#f1f5f9", text: "#475569" },
 };
 
-
-
-
+// ✅ Forme par défaut d'un résumé de réconciliation.
+//    Sert de filet de sécurité : si l'API ne renvoie pas (ou mal) le champ
+//    `summary`, on s'appuie sur ces valeurs au lieu de planter.
+const EMPTY_SUMMARY = {
+  total_anomalies: 0,
+  missing_transactions: 0,
+  amount_mismatches: 0,
+  status_mismatches: 0,
+  resolved_count: 0,
+};
 
 // =========================
 // SUB-COMPONENTS
@@ -106,7 +113,7 @@ function Card({ children, style = {} }) {
 // =========================
 export default function App() {
 
-  // ✅ Auth hook moved INSIDE the component (hooks cannot be called at module scope)
+  // ✅ Auth hook (les hooks ne peuvent pas être appelés au niveau module)
   const { token, username, logout } = useAuth();
 
   // ✅ ids des anomalies marquées résolues localement (disparition immédiate du tableau)
@@ -118,11 +125,7 @@ export default function App() {
 
   const [chartView, setChartView]         = useState("today");
   const [anomalyFilter, setAnomalyFilter] = useState("all");
-  const [statusFilter, setStatusFilter]   = useState("all"); // ✅ NOUVEAU
   const [anomalySearch, setAnomalySearch] = useState("");
-  // 🔧 On démarre le tableau OUVERT par défaut pour que l'utilisateur
-  //    voie directement les anomalies sans avoir à cliquer.
-  //    (Mets à false si tu préfères qu'il soit replié au démarrage.)
   const [anomaliesOpen, setAnomaliesOpen] = useState(true);
   const [anomalyPage, setAnomalyPage]     = useState(1);
   const [profileOpen, setProfileOpen]     = useState(false);
@@ -132,29 +135,28 @@ export default function App() {
   const PER_PAGE = 8;
   const [showWelcome, setShowWelcome] = useState(true);
   const [metrics, setMetrics] = useState(null);
-  // ✅ Affichage des métriques uniquement sur clic du bouton "Détails"
   const [showMetrics, setShowMetrics] = useState(false);
 
   // ✅ État du simulateur de transactions (start/stop depuis le dashboard)
   const [simState, setSimState] = useState({ running: false, generated: 0 });
   const [simBusy, setSimBusy]   = useState(false);
 
- const fetchMetrics = async () => {
-  try {
-    const response = await api.get("/metrics/overview");
-    setMetrics(response.data);
-  } catch (error) {
-    console.error(error);
-  }
-};
+  // =========================
+  // FETCHERS
+  // =========================
+  const fetchMetrics = async () => {
+    try {
+      const response = await api.get("/metrics/overview");
+      setMetrics(response.data || null);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-  // =========================
-  // ✅ SIMULATEUR DE TRANSACTIONS
-  // =========================
   const fetchSimStatus = async () => {
     try {
       const r = await api.get("/simulator/status");
-      setSimState(r.data || { running: false });
+      setSimState(r.data || { running: false, generated: 0 });
     } catch (e) {
       console.error(e);
     }
@@ -166,7 +168,7 @@ export default function App() {
     try {
       const endpoint = simState.running ? "/simulator/stop" : "/simulator/start";
       const r = await api.post(endpoint);
-      setSimState(r.data || { running: !simState.running });
+      setSimState(r.data || { running: !simState.running, generated: simState.generated || 0 });
       fetchStats();
     } catch (e) {
       console.error(e);
@@ -175,85 +177,35 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (!token) return;
-    fetchStats();
-    const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
-  }, [token]);
-
-  // ✅ Poll de l'état du simulateur
-  useEffect(() => {
-    if (!token) return;
-    fetchSimStatus();
-    const interval = setInterval(fetchSimStatus, 4000);
-    return () => clearInterval(interval);
-  }, [token]);
-
-
-  useEffect(() => {
-
-  fetchMetrics();
-
-  const interval = setInterval(fetchMetrics, 10000);
-
-  return () => clearInterval(interval);
-
-  }, []);
-
-
-
-  useEffect(() => {
-    if (!token) return;
-    runReconciliation();
-    const interval = setInterval(runReconciliation, 15000);
-    return () => clearInterval(interval);
-  }, [token]);
-
-  useEffect(() => {
-    function handler(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
-        setProfileOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-      const timer = setTimeout(() => {
-        setShowWelcome(false);
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }, []);
-
   const fetchStats = async () => {
     try {
       const response = await api.get("/dashboard/stats");
-      setStats(response.data);
+      setStats(response.data || {});
       setLastUpdate(new Date().toLocaleTimeString("fr-FR"));
-      setIsLoadingStats(false);
     } catch (error) {
       console.error(error);
+    } finally {
       setIsLoadingStats(false);
     }
   };
 
   const runReconciliation = async () => {
     try {
-      // 🐞 Bug corrigé : il manquait `const response =` avant le await,cd
-      //    du coup `response.data` lançait une ReferenceError silencieuse
-      //    et le tableau des anomalies ne s'affichait jamais.
       const response = await api.post("/reconciliation/run");
-      setReconciliation(response.data);
+      // ✅ On garde toujours un objet exploitable, même si l'API renvoie
+      //    une forme inattendue : summary par défaut + anomalies = [].
+      const data = response.data || {};
+      setReconciliation({
+        summary: { ...EMPTY_SUMMARY, ...(data.summary || {}) },
+        anomalies: Array.isArray(data.anomalies) ? data.anomalies : [],
+      });
     } catch (error) {
       console.error(error);
     }
   };
 
   // =========================
-  // ✅ RESOLVE ANOMALY
+  // RESOLVE ANOMALY
   // =========================
   const resolveAnomaly = async (id) => {
     if (!id) return;
@@ -273,6 +225,52 @@ export default function App() {
       setResolvingId(null);
     }
   };
+
+  // =========================
+  // EFFECTS
+  // =========================
+  useEffect(() => {
+    if (!token) return;
+    fetchStats();
+    const interval = setInterval(fetchStats, 5000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchSimStatus();
+    const interval = setInterval(fetchSimStatus, 4000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 10000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    runReconciliation();
+    const interval = setInterval(runReconciliation, 15000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  useEffect(() => {
+    function handler(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setProfileOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowWelcome(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // =========================
   // EXPORT CSV (avec Statut)
@@ -301,7 +299,7 @@ export default function App() {
   };
 
   // =========================
-  // ✅ CHART DATA — TODAY  (lit today_* — plus de mensonge visuel)
+  // CHART DATA — TODAY
   // =========================
   const todayData = [
     { name: "Réussies",   value: stats.today_success_count  || 0, color: "#22c55e" },
@@ -312,12 +310,13 @@ export default function App() {
 
   const sevenDaysData = Array.isArray(stats.weekly_data) ? stats.weekly_data : [];
 
+  // ✅ Résumé toujours sûr (jamais undefined)
+  const summary = { ...EMPTY_SUMMARY, ...(safeRecon?.summary || {}) };
+
   // =========================
   // FILTERED ANOMALIES
-  //  - on cache les anomalies RÉSOLUES (côté serveur OU marquées localement)
-  //  - on trie par date décroissante (les plus récentes en haut)
   // =========================
-  const rawAnomalies = safeRecon?.anomalies || [];
+  const rawAnomalies = Array.isArray(safeRecon?.anomalies) ? safeRecon.anomalies : [];
   const allAnomalies = rawAnomalies
     .filter(a => (a.status || "OPEN") !== "RESOLVED" && !locallyResolved.has(a.id))
     .slice()
@@ -333,10 +332,9 @@ export default function App() {
   });
   const pagedAnomalies = filteredAnomalies.slice((anomalyPage - 1) * PER_PAGE, anomalyPage * PER_PAGE);
   const totalPages = Math.ceil(filteredAnomalies.length / PER_PAGE);
-  const countByType   = (type)   => allAnomalies.filter(a => a.issue === type).length;
-  const countByStatus = (status) => allAnomalies.filter(a => (a.status || "OPEN") === status).length;
+  const countByType = (type) => allAnomalies.filter(a => a.issue === type).length;
 
-  // ✅ KPIs aujourd'hui (avec fallback sur all-time pour compat anciennes versions backend)
+  // ✅ KPIs aujourd'hui (avec fallback all-time pour compat anciennes versions backend)
   const todayTotal    = stats.today_total           ?? stats.total_transactions ?? 0;
   const todaySuccess  = stats.today_success_count   ?? stats.success_count      ?? 0;
   const todayFailed   = stats.today_failed_count    ?? stats.failed_count       ?? 0;
@@ -344,7 +342,7 @@ export default function App() {
   const todayReversed = stats.today_reversed_count  ?? stats.reversed_count     ?? 0;
   const todayRate     = stats.today_success_rate    ?? stats.success_rate       ?? 0;
 
-  // ✅ If not authenticated, render the login page (after all hooks have run)
+  // ✅ Si non authentifié, on rend la page de login (après l'exécution des hooks)
   if (!token) {
     return <LoginPage />;
   }
@@ -414,12 +412,8 @@ export default function App() {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              background: simState.running
-                ? "rgba(34,197,94,0.12)"
-                : "rgba(59,130,246,0.12)",
-              border: simState.running
-                ? "1px solid rgba(34,197,94,0.3)"
-                : "1px solid rgba(59,130,246,0.3)",
+              background: simState.running ? "rgba(34,197,94,0.12)" : "rgba(59,130,246,0.12)",
+              border: simState.running ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(59,130,246,0.3)",
               color: simState.running ? "#4ade80" : "#60a5fa",
               fontWeight: 600,
               opacity: simBusy ? 0.6 : 1,
@@ -428,13 +422,9 @@ export default function App() {
           >
             <span
               style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
+                width: 8, height: 8, borderRadius: "50%",
                 background: simState.running ? "#22c55e" : "#64748b",
-                boxShadow: simState.running
-                  ? "0 0 8px rgba(34,197,94,0.7)"
-                  : "none",
+                boxShadow: simState.running ? "0 0 8px rgba(34,197,94,0.7)" : "none",
                 animation: simState.running ? "pulse 1.5s infinite" : "none",
                 flexShrink: 0,
               }}
@@ -442,12 +432,9 @@ export default function App() {
             {simBusy
               ? "…"
               : simState.running
-              ? `■ Arrêter simulation${
-                  simState.generated ? ` (${simState.generated})` : ""
-                }`
+              ? `■ Arrêter simulation${simState.generated ? ` (${simState.generated})` : ""}`
               : "▶ Démarrer simulation"}
           </button>
-
 
           <button
             onClick={runReconciliation}
@@ -484,16 +471,11 @@ export default function App() {
                 <button style={dropItemStyle}>👤 Mon profil</button>
                 <button style={dropItemStyle}>⚙️ Paramètres</button>
                 <button
-  onClick={logout}
-  style={{
-    ...dropItemStyle,
-    borderTop: "1px solid rgba(255,255,255,0.07)",
-    color: "#f87171",
-    marginTop: 4
-  }}
->
-  🚪 Déconnexion
-</button>
+                  onClick={logout}
+                  style={{ ...dropItemStyle, borderTop: "1px solid rgba(255,255,255,0.07)", color: "#f87171", marginTop: 4 }}
+                >
+                  🚪 Déconnexion
+                </button>
               </div>
             )}
           </div>
@@ -505,10 +487,8 @@ export default function App() {
       ========================== */}
       <div style={{ padding: "32px", maxWidth: 1300, margin: "0 auto" }}>
 
-        {/* =========================
-            ✅ MESSAGE DE BIENVENUE
-        ========================== */}
-        {username && showWelcome &&  (
+        {/* MESSAGE DE BIENVENUE */}
+        {username && showWelcome && (
           <div style={{
             background: "linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.12))",
             border: "1px solid rgba(59,130,246,0.25)",
@@ -538,16 +518,13 @@ export default function App() {
           </div>
         )}
 
-        {/* =========================
-            ✅ VUE D'ENSEMBLE — AUJOURD'HUI uniquement
-        ========================== */}
+        {/* VUE D'ENSEMBLE — AUJOURD'HUI */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           gap: 12, flexWrap: "wrap", marginBottom: 16,
         }}>
           <h2 style={{ ...sectionTitleStyle, margin: 0 }}>Vue d'ensemble — aujourd'hui</h2>
 
-          {/* ✅ Bouton "Détails" : affiche / masque les métriques globales */}
           <button
             onClick={() => setShowMetrics(v => !v)}
             disabled={!metrics}
@@ -566,42 +543,19 @@ export default function App() {
           </button>
         </div>
 
-                {metrics && showMetrics && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-                        gap: 16,
-                        marginBottom: 32,
-                      }}
-                    >
-
-                      <KpiCard
-                        label="Réconciliations"
-                        value={metrics.total_runs}
-                        color="#8b5cf6"
-                      />
-
-                      <KpiCard
-                        label="Anomalies ouvertes"
-                        value={metrics.open_anomalies}
-                        color="#ef4444"
-                      />
-
-                      <KpiCard
-                        label="Anomalies résolues"
-                        value={metrics.resolved_anomalies}
-                        color="#22c55e"
-                      />
-
-                      <KpiCard
-                        label="Taux succès global"
-                        value={`${metrics.success_rate}%`}
-                        color="#3b82f6"
-                      />
-
-                    </div>
-                  )}
+        {metrics && showMetrics && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+            gap: 16,
+            marginBottom: 32,
+          }}>
+            <KpiCard label="Réconciliations"     value={metrics.total_runs ?? 0}          color="#8b5cf6" />
+            <KpiCard label="Anomalies ouvertes"  value={metrics.open_anomalies ?? 0}      color="#ef4444" />
+            <KpiCard label="Anomalies résolues"  value={metrics.resolved_anomalies ?? 0}  color="#22c55e" />
+            <KpiCard label="Taux succès global"  value={`${metrics.success_rate ?? 0}%`}  color="#3b82f6" />
+          </div>
+        )}
 
         {isLoadingStats ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 16, marginBottom: 32 }}>
@@ -614,17 +568,15 @@ export default function App() {
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))", gap: 16, marginBottom: 32 }}>
-            <KpiCard label="Total transactions" value={todayTotal.toLocaleString("fr-FR")} color="#3b82f6" sub="aujourd'hui" />
-            <KpiCard label="Réussies"   value={todaySuccess.toLocaleString("fr-FR")}  color="#22c55e" sub={`${todayRate}% du jour`} />
-            <KpiCard label="Échouées"   value={todayFailed.toLocaleString("fr-FR")}   color="#ef4444" />
-            <KpiCard label="En attente" value={todayPending.toLocaleString("fr-FR")}  color="#f59e0b" />
-            <KpiCard label="Annulées"   value={todayReversed.toLocaleString("fr-FR")} color="#94a3b8" />
+            <KpiCard label="Total transactions" value={todayTotal.toLocaleString("fr-FR")}    color="#3b82f6" sub="aujourd'hui" />
+            <KpiCard label="Réussies"           value={todaySuccess.toLocaleString("fr-FR")}  color="#22c55e" sub={`${todayRate}% du jour`} />
+            <KpiCard label="Échouées"           value={todayFailed.toLocaleString("fr-FR")}   color="#ef4444" />
+            <KpiCard label="En attente"         value={todayPending.toLocaleString("fr-FR")}  color="#f59e0b" />
+            <KpiCard label="Annulées"           value={todayReversed.toLocaleString("fr-FR")} color="#94a3b8" />
           </div>
         )}
 
-        {/* =========================
-            GRAPHIQUE
-        ========================== */}
+        {/* GRAPHIQUE */}
         <Card style={{ marginBottom: 32 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
@@ -682,9 +634,7 @@ export default function App() {
           </ResponsiveContainer>
         </Card>
 
-        {/* =========================
-            RÉCONCILIATION
-        ========================== */}
+        {/* RÉCONCILIATION */}
         {safeRecon && (
           <div style={{ marginBottom: 32 }}>
             <h2 style={sectionTitleStyle}>Résultats de la réconciliation</h2>
@@ -706,20 +656,20 @@ export default function App() {
                 <div>
                   <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 2px" }}>Anomalies à investiguer</p>
                   <p style={{ fontSize: 32, fontWeight: 700, color: "#ef4444", margin: 0, lineHeight: 1 }}>
-                    {safeRecon?.summary?.total_anomalies ?? 0}
+                    {summary.total_anomalies}
                   </p>
-                  {safeRecon.summary.resolved_count > 0 && (
+                  {summary.resolved_count > 0 && (
                     <p style={{ fontSize: 11, color: "#22c55e", margin: "4px 0 0", fontWeight: 600 }}>
-                      ✓ {safeRecon.summary.resolved_count} déjà résolue{safeRecon.summary.resolved_count > 1 ? "s" : ""}
+                      ✓ {summary.resolved_count} déjà résolue{summary.resolved_count > 1 ? "s" : ""}
                     </p>
                   )}
                 </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[
-                    { label: "Transactions manquantes", val: safeRecon.summary.missing_transactions, color: "#f59e0b" },
-                    { label: "Montants incorrects",     val: safeRecon.summary.amount_mismatches,    color: "#3b82f6" },
-                    { label: "Statuts incorrects",      val: safeRecon.summary.status_mismatches,    color: "#a855f7" },
+                    { label: "Transactions manquantes", val: summary.missing_transactions, color: "#f59e0b" },
+                    { label: "Montants incorrects",     val: summary.amount_mismatches,    color: "#3b82f6" },
+                    { label: "Statuts incorrects",      val: summary.status_mismatches,    color: "#a855f7" },
                   ].map((item, i) => (
                     <div key={i} style={{
                       background: "#0f172a", borderRadius: 10, padding: "8px 14px",
@@ -812,7 +762,6 @@ export default function App() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                        {/* ✅ Colonnes Statut et Action ajoutées */}
                         {["Référence", "Problème détecté", "Statut", "Gravité", "Montant", "Date", "Action"].map((h) => (
                           <th
                             key={h}
@@ -869,7 +818,6 @@ export default function App() {
                                 <Badge type={anomaly.issue} />
                               </td>
 
-                              {/* ✅ STATUT */}
                               <td style={{ padding: "12px 14px" }}>
                                 <StatusPill status={status} />
                               </td>
@@ -908,7 +856,6 @@ export default function App() {
                                 {anomaly.detected_at || anomaly.date || anomaly.created_at || "—"}
                               </td>
 
-                              {/* ✅ ACTION */}
                               <td style={{ padding: "12px 14px", textAlign: "center" }}>
                                 {isResolved ? (
                                   <span style={{ color: "#22c55e", fontSize: 16 }}>✓</span>
