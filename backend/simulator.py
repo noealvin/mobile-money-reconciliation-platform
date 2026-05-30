@@ -23,8 +23,8 @@ from datetime import datetime
 
 from faker import Faker
 
-from backend.database import SessionLocal
-from backend.models_pytantic import Transaction
+from database import SessionLocal
+from models_pytantic import Transaction
 
 
 # =========================

@@ -3,20 +3,20 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import uuid
 
-# ✅ Imports corrigés : tous préfixés par `backend.`
+# ✅ Imports corrigés : tous préfixés par ``
 #    (l'ancien `from schemas import ...` plantait dans Docker)
-from backend.schemas import TransactionCreate
-from backend.routes.Auth_routes import router as auth_router
-from backend.reconciliation_engine import run_reconciliation
-from backend.service.reconciliation_service import (
+from schemas import TransactionCreate
+from routes.Auth_routes import router as auth_router
+from reconciliation_engine import run_reconciliation
+from service.reconciliation_service import (
     save_reconciliation_result,
     resolve_anomaly,
 )
-from backend.database import SessionLocal, engine, Base
-from backend.models_pytantic import Transaction, ReconciliationRun, Anomaly
+from database import SessionLocal, engine, Base
+from models_pytantic import Transaction, ReconciliationRun, Anomaly
 
 # ✅ Simulateur contrôlable (start/stop depuis le frontend)
-from backend.simulator import (
+from simulator import (
     start_simulator,
     stop_simulator,
     get_status as get_simulator_status,

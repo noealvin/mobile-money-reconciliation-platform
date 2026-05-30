@@ -1,6 +1,6 @@
-from backend.database import SessionLocal, Base, engine
-from backend.models.users import User
-from backend.security import hash_password
+from database import SessionLocal, Base, engine
+from models.users import User
+from security import hash_password
 
 # Création des tables
 Base.metadata.create_all(bind=engine)

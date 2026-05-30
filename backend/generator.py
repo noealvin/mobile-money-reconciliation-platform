@@ -1,7 +1,7 @@
 import random
 import pandas as pd
-from backend.database import SessionLocal
-from backend.models_pytantic import Transaction
+from database import SessionLocal
+from models_pytantic import Transaction
 
 db = SessionLocal()
 
