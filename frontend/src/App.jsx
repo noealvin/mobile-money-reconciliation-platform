@@ -31,16 +31,7 @@ const STATUS_CONFIG = {
   reversed: { label: "Annulées",   color: "#94a3b8", bg: "#f1f5f9", text: "#475569" },
 };
 
-const safeRecon = reconciliation || {
-                                      summary: {
-                                        total_anomalies: 0,
-                                        missing_transactions: 0,
-                                        amount_mismatches: 0,
-                                        status_mismatches: 0,
-                                        resolved_count: 0,
-                                      },
-                                      anomalies: [],
-                                    };
+
 
 
 
@@ -251,7 +242,7 @@ export default function App() {
 
   const runReconciliation = async () => {
     try {
-      // 🐞 Bug corrigé : il manquait `const response =` avant le await,
+      // 🐞 Bug corrigé : il manquait `const response =` avant le await,cd
       //    du coup `response.data` lançait une ReferenceError silencieuse
       //    et le tableau des anomalies ne s'affichait jamais.
       const response = await api.post("/reconciliation/run");
