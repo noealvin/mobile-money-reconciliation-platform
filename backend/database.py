@@ -9,18 +9,26 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 
 # ✅ Adresse de connexion à PostgreSQL
-#    Lue depuis la variable d'environnement DATABASE_URL
-#    (définie dans docker-compose.yml) pour que la même image
-#    fonctionne en local ET dans Docker sans modification.
+#    Lue depuis la variable d'environnement DATABASE_URL.
+#    - En local (docker-compose) : postgresql://postgres:postgres@db:5432/mmrecon
+#    - Sur Render : la valeur est fournie par la base PostgreSQL managée.
 #    Fallback = config Docker par défaut.
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://postgres:postgres@db:5432/mmrecon",
 )
 
+# ✅ Compatibilité Render : Render fournit une URL qui commence par
+#    "postgres://". SQLAlchemy 1.4+/2.x exige "postgresql://".
+#    On normalise automatiquement pour éviter le crash.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 # Création du moteur de connexion
-engine = create_engine(DATABASE_URL)
+#   pool_pre_ping=True : vérifie que la connexion est vivante avant de
+#   l'utiliser (utile avec une base managée qui ferme les connexions inactives).
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 
 # Création d'une fabrique de sessions
