@@ -8,7 +8,7 @@ from schemaas.Auth_schema import (
     TokenResponse
 )
 
-from backend.security import (
+from security import (
     verify_password,
     create_access_token
 )
