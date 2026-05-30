@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from backend.database import SessionLocal
-from backend.models.users import User
-from backend.schemaas.Auth_schema import (
+from database import SessionLocal
+from models.users import User
+from schemaas.Auth_schema import (
     LoginRequest,
     TokenResponse
 )
