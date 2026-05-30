@@ -31,6 +31,17 @@ const STATUS_CONFIG = {
   reversed: { label: "Annulées",   color: "#94a3b8", bg: "#f1f5f9", text: "#475569" },
 };
 
+const safeRecon = reconciliation || {
+                                      summary: {
+                                        total_anomalies: 0,
+                                        missing_transactions: 0,
+                                        amount_mismatches: 0,
+                                        status_mismatches: 0,
+                                        resolved_count: 0,
+                                      },
+                                      anomalies: [],
+                                    };
+
 
 
 // =========================
@@ -111,7 +122,7 @@ export default function App() {
   const [locallyResolved, setLocallyResolved] = useState(() => new Set());
 
   const [stats, setStats] = useState({});
-  const [reconciliation, setReconciliation] = useState(null);
+  const [safeRecon, setReconciliation] = useState(null);
   const [lastUpdate, setLastUpdate] = useState("");
 
   const [chartView, setChartView]         = useState("today");
@@ -276,7 +287,7 @@ export default function App() {
   // EXPORT CSV (avec Statut)
   // =========================
   const exportCSV = () => {
-    const anomalies = reconciliation?.anomalies || [];
+    const anomalies = safeRecon?.anomalies || [];
     const rows = [
       ["Référence", "Problème détecté", "Statut", "Gravité", "Montant", "Date"],
       ...anomalies.map(a => [
@@ -315,7 +326,7 @@ export default function App() {
   //  - on cache les anomalies RÉSOLUES (côté serveur OU marquées localement)
   //  - on trie par date décroissante (les plus récentes en haut)
   // =========================
-  const rawAnomalies = reconciliation?.anomalies || [];
+  const rawAnomalies = safeRecon?.anomalies || [];
   const allAnomalies = rawAnomalies
     .filter(a => (a.status || "OPEN") !== "RESOLVED" && !locallyResolved.has(a.id))
     .slice()
@@ -683,7 +694,7 @@ export default function App() {
         {/* =========================
             RÉCONCILIATION
         ========================== */}
-        {reconciliation && (
+        {safeRecon && (
           <div style={{ marginBottom: 32 }}>
             <h2 style={sectionTitleStyle}>Résultats de la réconciliation</h2>
 
@@ -704,20 +715,20 @@ export default function App() {
                 <div>
                   <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 2px" }}>Anomalies à investiguer</p>
                   <p style={{ fontSize: 32, fontWeight: 700, color: "#ef4444", margin: 0, lineHeight: 1 }}>
-                    {reconciliation.summary.total_anomalies}
+                    {safeRecon?.summary?.total_anomalies ?? 0}
                   </p>
-                  {reconciliation.summary.resolved_count > 0 && (
+                  {safeRecon.summary.resolved_count > 0 && (
                     <p style={{ fontSize: 11, color: "#22c55e", margin: "4px 0 0", fontWeight: 600 }}>
-                      ✓ {reconciliation.summary.resolved_count} déjà résolue{reconciliation.summary.resolved_count > 1 ? "s" : ""}
+                      ✓ {safeRecon.summary.resolved_count} déjà résolue{safeRecon.summary.resolved_count > 1 ? "s" : ""}
                     </p>
                   )}
                 </div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {[
-                    { label: "Transactions manquantes", val: reconciliation.summary.missing_transactions, color: "#f59e0b" },
-                    { label: "Montants incorrects",     val: reconciliation.summary.amount_mismatches,    color: "#3b82f6" },
-                    { label: "Statuts incorrects",      val: reconciliation.summary.status_mismatches,    color: "#a855f7" },
+                    { label: "Transactions manquantes", val: safeRecon.summary.missing_transactions, color: "#f59e0b" },
+                    { label: "Montants incorrects",     val: safeRecon.summary.amount_mismatches,    color: "#3b82f6" },
+                    { label: "Statuts incorrects",      val: safeRecon.summary.status_mismatches,    color: "#a855f7" },
                   ].map((item, i) => (
                     <div key={i} style={{
                       background: "#0f172a", borderRadius: 10, padding: "8px 14px",
